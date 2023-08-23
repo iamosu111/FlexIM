@@ -1,13 +1,12 @@
 - [ ] ToDoList 
-    - [X] complete simchain-server
-    - [X] format schnorr
-    - [x] complete signature use schnorr
-    - [x] query bug
-    - [x] query verify
-    - [x] inter-index
-    - [x] aggregate signature
-    - [x] error_bounds bugs
-    - [ ] no aggregation
+    - [ ] MB-Tree
+    - [ ] CMAB
+    - [ ] bloom filter+ budget allocation
+    - [ ] query 
+    - [ ] query verify
+    - [ ] inter-index
+    - [ ] index cost evaluation
+    - [ ] Root Merkle Tree
 
 ## Necessary Knowledge
 
@@ -190,7 +189,4 @@ The response is a JSON object like:
 }
 ```
 
-
-
-聚合签名目前采用第一种方式：通过矿工将一个区块内相同地址交易的内容进行拼接形成一个聚合签名，同块内索引一起存储在区块数据`blk_data`中。
 
