@@ -9,3 +9,6 @@ pub use bloom_filter::*;
 
 pub mod chain;
 pub use chain::*;
+
+pub mod merkle_tree;
+pub use merkle_tree::*;

@@ -15,6 +15,8 @@ async-trait = "0.1"
 rsa = "0.6"
 rand = "0.8"
 howlong = "0.1"
+ring = "0.16.15"
+protobuf = "2.16.2"
 
 
 [dependencies.aead]
