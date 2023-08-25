@@ -158,35 +158,4 @@ The response is a JSON object like
 }
 ```
 
-#### Verify
-
-API endpoint is:
-
-```
-POST /verify
-```
-
-Parameters are followed with this request in JSON format, which is the response of Verify process
-
-```
-{
-    "result": ...,
-    "res_sigs": ...,
-    "query_param": ...,
-    "query_time_ms": ...,
-    "use_inter_index": ...,
-    "use_intra_index": ...
-}
-```
-
-The response is a JSON object like:
-
-```
-{
-    "pass": ...,
-    "fail_detail": ...,
-    "verify_time_in_ms": ...
-}
-```
-
 
