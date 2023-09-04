@@ -44,7 +44,6 @@ pub fn build_block<'a>(
 
     chain.write_block_header(block_header.clone())?;
     chain.write_block_data(block_data.clone())?;
-    //todo : build index
     //todo : Index cost evaluation
     let (block_index,index_cost_value)=index_build_block(&attributes,block_id,chain)?;
     //todo : BMT build

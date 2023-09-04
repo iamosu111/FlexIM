@@ -1,4 +1,6 @@
 
+use std::collections::BTreeMap;
+
 use anyhow::Result;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use serde::{Serialize, Deserialize};
@@ -35,6 +37,7 @@ pub type TxType = u64;
 // FloatType especially for linear regression
 pub type FloatType = f64;
 
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {
     pub error_bounds: FloatType,
@@ -44,7 +47,39 @@ pub struct Parameter {
     pub block_count: u64,
     pub inter_index_timestamps: Vec<TsType>,
 }
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+enum BTreeEnum {
+    U64(BTreeMap<u64, Transaction>),
+    String(BTreeMap<String, Transaction>),
+}
+// trait Extract<T> {
+//     fn extract(&self) -> Option<&T>;
+// }
 
+// impl Extract<BTreeMap<u64, Transaction>> for BTreeEnum {
+//     fn extract(&self) -> Option<&BTreeMap<u64, Transaction>> {
+//         if let BTreeEnum::U64(btree_map) = self {
+//             Some(btree_map)
+//         } else {
+//             None
+//         }
+//     }
+// }
+
+// impl Extract<BTreeMap<String, Transaction>> for BTreeEnum {
+//     fn extract(&self) -> Option<&BTreeMap<String, Transaction>> {
+//         if let BTreeEnum::String(btree_map) = self {
+//             Some(btree_map)
+//         } else {
+//             None
+//         }
+//     }
+// }
+enum ExtractedData{
+    TxIds(Vec<u64>),
+    Addresses(Vec<String>),
+    TransValues(Vec<u64>),
+}
 #[async_trait::async_trait]
 pub trait LightNodeInterface {
     async fn lightnode_get_parameter(&self) -> Result<Parameter>;

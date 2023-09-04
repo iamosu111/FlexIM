@@ -1,9 +1,10 @@
-use super::{IdType, TsType, PkType};
+use super::{IdType, TsType, PkType, BTreeEnum};
 use std::collections::{HashMap, BTreeMap};
 use serde::{Deserialize, Serialize};
 use crate::{digest::*, KeyType, FloatType, TransactionValue, TxType, Transaction};
 
 // static INDEX_ID_CNT: AtomicU64 = AtomicU64::new(0);
+
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
@@ -37,8 +38,7 @@ impl Digestible for BlockHeader {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntraIndex {
     pub blockId: IdType,
-    pub attribute: Vec<usize>,
-    pub intraindex: Vec<BTreeMap<u64,Transaction>>,
+    pub index: HashMap<usize, BTreeEnum>,  // 使用BTreeEnum替代具体的BTreeMap类型
 }
 
 

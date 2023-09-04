@@ -6,13 +6,13 @@ use howlong::Duration;
 use log::info;
 use rand_core::block;
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Bound};
 #[derive(Debug, Default, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct QueryParam{
     #[serde(rename = "query_attribute")]
     pub key: Vec<KeyType>,
     #[serde(rename = "range")]
-    pub value: Vec<[Option<TsType>; 2]>,
+    pub value: Vec<[Option<KeyType>; 2]>,
     pub bloom_filter: bool,
     pub intra_index: bool,
 }
@@ -129,14 +129,14 @@ impl OverallResult {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ResultTxs(pub HashMap<IdType, Vec<Transaction>>);
+pub struct ResultTxs(pub Vec<HashMap<IdType, Transaction>>);
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResultVos(pub HashMap<IdType, Option<Signature>>);
 
 impl ResultTxs{
     pub fn new() -> Self{
-        Self(HashMap::new())
+        Self(Vec::new())
     }
 }
 
@@ -150,8 +150,9 @@ impl ResultVos{
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueryRequest{
     pub key:KeyType,
-    pub value: [Option<TsType>; 2],
+    pub value: [Option<KeyType>; 2],
 }
+
 pub fn extract_request(q_param: &QueryParam)-> Result<Vec<QueryRequest>>{
     let mut requests=Vec::new();
     for x in 0..q_param.key.len(){
@@ -213,7 +214,7 @@ fn query_chain_inter_index(
     block_headers: &mut Vec<BlockHeader>,
     block_datas: &mut Vec<BlockData>,
     chain: &impl ReadInterface,
-) -> Result<()>{
+) -> Result<(ResultTxs)>{
     info!("query using inter_index");
     let param = chain.get_parameter()?;
     let inter_indexs = chain.read_inter_indexs()?;
@@ -225,8 +226,8 @@ fn query_chain_inter_index(
             timestamp_range=request.value;
         }
     }
-    let left_timestamp = timestamp_range[0].unwrap();
-    let right_timestamp = timestamp_range[1].unwrap();
+    let left_timestamp = timestamp_range[0].as_ref().and_then(|s| s.parse::<u64>().ok()).unwrap();
+    let right_timestamp = timestamp_range[1].as_ref().and_then(|s| s.parse::<u64>().ok()).unwrap();
     // use learned index with err
     let start_inter_index = chain.read_inter_index(variant_binary_search(&index_timestamps[..], left_timestamp))?;
     let end_inter_index = chain.read_inter_index(variant_binary_search(&index_timestamps[..], right_timestamp))?;
@@ -261,15 +262,29 @@ fn query_in_block(
     requests: Vec<QueryRequest>,
     block_id: IdType,
     chain: &impl ReadInterface,
-) -> Result<VerifyObject> {
+) -> Result<(HashMap<IdType,Transaction>)> {
     let block_data = chain.read_block_data(block_id)?;
+    let intraindex=chain.read_intra_index(block_id)?;
+    let key_to_index: HashMap<&str, usize> = [
+    ("timestamp", 0),
+    ("id", 1),
+    ("values", 2),
+    ("address", 3),].iter().cloned().collect();
+    let mut res:HashMap<IdType,Transaction> = HashMap::new();
     for request in &requests{
-        if request.key == "timestamp".to_string(){
-            continue;
+        if let Some(&index_key) = key_to_index.get(request.key.as_str()) {
+            if index_key == 0 {
+                continue;
+            }
+            match intraindex.index.get(&index_key) {
+                Some(btree) => query_with_intra_index(&mut res,btree, request.value),
+                None => query_no_intra_index(&mut res,request.key,block_data,request.value),
+            };
+        } else {
+            panic!("key is error!");
         }
-        if request.key=="id"
     }
-    Ok(vo)
+    Ok((res))
 }
 
 /// return BlockData & BlockHeader falls in the timestamp range
@@ -278,7 +293,7 @@ fn query_chain_no_inter_index(
     block_headers: &mut Vec<BlockHeader>,
     block_datas: &mut Vec<BlockData>,
     chain: &impl ReadInterface,
-) -> Result<()>{
+) -> Result<(ResultTxs)>{
     let start_index = chain.get_parameter()?.start_block_id;
     let mut block_index = start_index + chain.get_parameter()?.block_count.clone() - 1;
     while block_index >= start_index as u64 {
@@ -289,5 +304,66 @@ fn query_chain_no_inter_index(
         block_index -= 1;
     }
 
+    Ok(())
+}
+
+fn query_with_intra_index(
+    res : &mut HashMap<IdType,Transaction>,
+    btree: &BTreeEnum,
+    values: [Option<KeyType>; 2],
+) -> Result<()> {
+    if let BTreeEnum::U64(btree_map) = btree {
+        let start = values[0].as_ref().and_then(|s| s.parse::<u64>().ok());
+        let end = values[1].as_ref().and_then(|s| s.parse::<u64>().ok());
+        let start_bound = start.map_or(Bound::Unbounded, Bound::Included);
+        let end_bound = end.map_or(Bound::Unbounded, Bound::Excluded);
+        for (_, v) in btree_map.range((start_bound, end_bound)) {
+            res.insert(v.id, *v);
+        }
+    } else if let BTreeEnum::String(btree_map) = btree {
+        let start = values[0].as_ref();
+        let end = values[1].as_ref();
+        let start_bound = start.map_or(Bound::Unbounded, |s| Bound::Included(*s));
+        let end_bound = end.map_or(Bound::Unbounded, |s| Bound::Excluded(*s));
+        for (k, v) in btree_map.range((start_bound, end_bound)) {
+            res.insert(v.id, *v);
+        }
+    } else {
+        panic!("BTreeEnum type mismatch");
+    }
+    
+    Ok(())
+}
+
+fn query_no_intra_index (   
+    res : &mut HashMap<IdType,Transaction>,
+    attribute: KeyType,
+    block_data: BlockData,
+    values: [Option<KeyType>; 2],
+)->Result<()>{
+    if attribute == "address".to_string(){
+        for x in 0..block_data.txs.len(){
+            if block_data.txs[x].value.address <= values[1].unwrap() && block_data.txs[x].value.address >= values[0].unwrap() {
+                // if !res.contains_key(&block_data.txs[x].id) {
+                    res.insert(block_data.txs[x].id, block_data.txs[x]);
+            }
+        }
+    }else{
+        let start = values[0].as_ref().and_then(|s| s.parse::<u64>().ok()).unwrap();
+        let end = values[1].as_ref().and_then(|s| s.parse::<u64>().ok()).unwrap();
+        match attribute.as_str() {
+            "id" => {for x in 0..block_data.txs.len(){
+                if block_data.txs[x].id >=start && block_data.txs[x].id<=end {
+                    // if !res.contains_key(&block_data.txs[x].id) {
+                        res.insert(block_data.txs[x].id, block_data.txs[x]);
+                }
+            }}
+            "value" => {for x in 0..block_data.txs.len(){
+                res.insert(block_data.txs[x].id, block_data.txs[x]);
+            }
+            }
+            _ => panic!("attrubute error from query_no_intra_index!")
+        }
+    }
     Ok(())
 }
