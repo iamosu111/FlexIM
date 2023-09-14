@@ -129,7 +129,13 @@ impl OverallResult {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ResultTxs(pub Vec<HashMap<IdType, Transaction>>);
+pub struct ResultTxs(pub Vec<BlockTxs>);
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BlockTxs {
+    block_id: IdType,
+    Txs:HashMap<IdType, Transaction>
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResultVos(pub HashMap<IdType, Option<Signature>>);
@@ -194,12 +200,10 @@ pub fn historical_query(q_param: &QueryParam, chain: &impl ReadInterface)
 
     //query block_header & block_data within the query range of timestamp
     if q_param.key.contains(&"timestamp".to_string()) {
-        query_chain_inter_index(&q_param, &mut block_header, &mut block_data, chain)?;
+        query_chain_inter_index(&q_param, chain)?;
     } else {
-        query_chain_no_inter_index(&q_param, &mut block_header, &mut block_data, chain)?;
+        query_chain_no_inter_index(&q_param, chain)?;
     }
-    info!("block_headers len : {:#?}",block_header.len());
-    info!("block_datas len : {:#?}",block_data.len());
     //query inside block to check if consist key
     let mut vo_size=0;
     result.vo_size=vo_size;
@@ -211,11 +215,10 @@ pub fn historical_query(q_param: &QueryParam, chain: &impl ReadInterface)
 /// return BlockData & BlockHeader falls in the timestamp range
 fn query_chain_inter_index(
     q_param: &QueryParam,
-    block_headers: &mut Vec<BlockHeader>,
-    block_datas: &mut Vec<BlockData>,
     chain: &impl ReadInterface,
 ) -> Result<(ResultTxs)>{
     info!("query using inter_index");
+    let mut res_txs = ResultTxs::new();
     let param = chain.get_parameter()?;
     let inter_indexs = chain.read_inter_indexs()?;
     let index_timestamps = inter_indexs.iter().map(|x| x.start_timestamp.to_owned() as TsType).collect::<Vec<TsType>>();
@@ -243,19 +246,48 @@ fn query_chain_inter_index(
         let block_header = chain.read_block_header(index)?;
         if block_header.time_stamp >= left_timestamp
         && block_header.time_stamp <= right_timestamp{
-            block_headers.push(block_header.to_owned());
             if q_param.bloom_filter
-            && !epoch.agg_bloom_filter.contains(&key) {
-                index-=1
+            && !judge_contain_key(requests, block_header.BMT_root) {
+                index-=1;
                 continue;
             }
-            query_in_block(requests,index,chain);
+            let block_txs=query_in_block(requests,index,chain)?;
+            let block_res = BlockTxs {
+                block_id:index,
+                Txs: block_txs,
+            };
+            res_txs.0.push(block_res);
         }
         index -= 1;
     }
 
     
-    Ok(())
+    Ok((res_txs))
+}
+fn judge_contain_key(requests: Vec<QueryRequest>, bf: SeededBloomFilter) -> bool {
+    for request in &requests {
+        if request.key == "timestamp".to_string() {
+            continue;
+        }
+
+        if request.key == "address" {
+            if bf.contains(&request.value[0]) {
+                return true
+            }
+        }else{
+             let (left, right) = match (request.value[0].as_ref().and_then(|s| s.parse::<u64>().ok()), request.value[1].as_ref().and_then(|s| s.parse::<u64>().ok())) {
+                (Some(l), Some(r)) => (l, r),
+                 _ => panic!("inexistence of left bound or right bound from judge_contain_key"), 
+                 };
+
+            for i in left..=right { // 遍历左、右边界间的所有值
+                 if bf.contains(&i) {
+                  return true; // 如果存在布隆过滤器中的值，则返回 true
+              }
+           }
+        }
+    }
+    false
 }
 
 fn query_in_block(
@@ -287,24 +319,32 @@ fn query_in_block(
     Ok((res))
 }
 
-/// return BlockData & BlockHeader falls in the timestamp range
+
 fn query_chain_no_inter_index(
     q_param: &QueryParam,
-    block_headers: &mut Vec<BlockHeader>,
-    block_datas: &mut Vec<BlockData>,
     chain: &impl ReadInterface,
 ) -> Result<(ResultTxs)>{
+    let requests=extract_request(q_param)?;
+    let mut res_txs = ResultTxs::new();
     let start_index = chain.get_parameter()?.start_block_id;
     let mut block_index = start_index + chain.get_parameter()?.block_count.clone() - 1;
     while block_index >= start_index as u64 {
         let block_header = chain.read_block_header(block_index)?;
-        let block_data = chain.read_block_data(block_index)?;
-            block_headers.push(block_header.to_owned());
-            block_datas.push(block_data.to_owned());
-        block_index -= 1;
+            if q_param.bloom_filter
+            && !judge_contain_key(requests, block_header.BMT_root) {
+                block_index-=1;
+                continue;
+            }
+            let block_txs=query_in_block(requests,block_index,chain)?;
+            let block_res = BlockTxs {
+                block_id:block_index,
+                Txs: block_txs,
+            };
+            res_txs.0.push(block_res);
+            block_index -= 1;
     }
 
-    Ok(())
+    Ok(res_txs)
 }
 
 fn query_with_intra_index(

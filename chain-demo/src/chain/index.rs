@@ -1,7 +1,7 @@
 use super::{IdType, TsType, PkType, BTreeEnum};
 use std::collections::{HashMap, BTreeMap};
 use serde::{Deserialize, Serialize};
-use crate::{digest::*, KeyType, FloatType, TransactionValue, TxType, Transaction};
+use crate::{digest::*, KeyType, FloatType, TransactionValue, TxType, Transaction, SeededBloomFilter};
 
 // static INDEX_ID_CNT: AtomicU64 = AtomicU64::new(0);
 
@@ -20,7 +20,7 @@ pub struct BlockHeader {
     pub pre_hash: Digest,
     // pub data_root: Digest,
     pub time_stamp: TsType,
-    pub BMT_root: Digest,
+    pub BMT_root: SeededBloomFilter,
     pub rmt_root: Digest,
 }
 

@@ -37,6 +37,8 @@ pub type TxType = u64;
 // FloatType especially for linear regression
 pub type FloatType = f64;
 
+pub static BLOOM_CAPACITY: usize = 50000;
+pub static BLOOM_FP: f64 = 0.01;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {

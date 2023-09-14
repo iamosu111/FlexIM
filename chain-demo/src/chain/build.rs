@@ -3,6 +3,8 @@ use log::info;
 use crate::{Digest, btree::index_build,btree::index_build_block};
 use super::*;
 
+use crate::SeededBloomFilter;
+
 ///
 /// 
 /// For BlockData
@@ -27,13 +29,18 @@ pub fn build_block<'a>(
     _time_stamp = txs[0].value.time_stamp;
     let mut attributes: [usize;3]= [0,1,2];
     let mut height=[block_id];
-
+    let mut bloom_filter: SeededBloomFilter = SeededBloomFilter::new(BLOOM_CAPACITY,BLOOM_FP);
+    for tx in txs.iter(){
+      bloom_filter.insert(&tx.id);
+      bloom_filter.insert(&tx.value.address);
+      bloom_filter.insert(&tx.value.trans_value);
+    }
     let block_header = BlockHeader{
         block_id,
         pre_hash,
         time_stamp: _time_stamp,
-        BMT_root: todo!(),
-        rmt_root: todo!(),
+        BMT_root: bloom_filter,
+        rmt_root: pre_hash,
     };
 
     let block_data = BlockData {
