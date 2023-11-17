@@ -38,15 +38,10 @@ impl Digestible for BlockHeader {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntraIndex {
     pub blockId: IdType,
-    pub index: HashMap<usize, BTreeEnum>,  // 使用BTreeEnum替代具体的BTreeMap类型
+    pub index: HashMap<String, BTreeEnum>,  // 使用BTreeEnum替代具体的BTreeMap类型
 }
 
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IndexCost {
-    pub blockId: IdType,
-    pub index_cost: Vec<u64>,
-}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InterIndex {
     pub start_timestamp: TsType,

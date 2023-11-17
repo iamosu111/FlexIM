@@ -47,6 +47,9 @@ impl_get_info!(web_get_blk_header, read_block_header);
 impl_get_info!(web_get_blk_data, read_block_data);
 impl_get_info!(web_get_inter_index, read_inter_index);
 impl_get_info!(web_get_transaction, read_transaction);
+impl_get_info!(web_get_intra_index, read_intra_index);
+impl_get_info!(web_get_index_config, read_index_config);
+
 
 
 
@@ -64,7 +67,7 @@ async fn web_get_inter_indexs() -> actix_web::Result<impl Responder> {
 
 async fn web_query(query_param: web::Json<QueryParam>) -> actix_web::Result<impl Responder>{
     info!("into web_query");
-    let result = historical_query(&query_param, get_chain()).map_err(handle_err)?;
+    let result = historical_query(&query_param, &mut get_chain()).map_err(handle_err)?;
     Ok(HttpResponse::Ok().json(result))
 }
 

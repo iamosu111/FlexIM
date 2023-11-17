@@ -14,6 +14,8 @@ pub struct SimChain {
     block_data_db: DB,
     intra_index_db:DB,
     index_cost_db:DB,
+    inter_index_db:DB,
+    index_config_db:DB,
     tx_db: DB,
 }
 
@@ -35,6 +37,8 @@ impl SimChain {
             block_data_db: DB::open(&opts, path.join("blk_data.db"))?,
             intra_index_db: DB::open(&opts, path.join("intra_index.db"))?,
             index_cost_db: DB::open(&opts, path.join("index_cost.db"))?,
+            inter_index_db:DB::open(&opts,path.join("inter_index_db"))?,
+            index_config_db:DB::open(&opts,path.join("index_config_db"))?,
             tx_db: DB::open(&opts, path.join("tx.db"))?,
         })
     }
@@ -50,6 +54,8 @@ impl SimChain {
             intra_index_db: DB::open_default(path.join("intra_index.db"))?,
             tx_db: DB::open_default(path.join("tx.db"))?,
             index_cost_db: DB::open_default(path.join("index_cost.db"))?,
+            inter_index_db: DB::open_default(path.join("inter_index_db"))?,
+            index_config_db: DB::open_default(path.join("index_config_db"))?,
         })
     }
 }
@@ -106,13 +112,6 @@ impl ReadInterface for SimChain {
             .context("failed to read transaction")?;
         Ok(bincode::deserialize::<Transaction>(&data[..])?)
     }
-    fn read_index_cost (&self, blockId: IdType) -> Result<IndexCost>{
-        let data = self
-            .index_cost_db
-            .get(blockId.to_le_bytes())?
-            .context("failed to read intra index")?;
-        Ok(bincode::deserialize::<IndexCost>(&data[..])?)
-    }
     fn read_inter_index(&self, timestamp: TsType) -> Result<InterIndex>{
         let data = self
             .inter_index_db
@@ -127,6 +126,14 @@ impl ReadInterface for SimChain {
             inter_indexs.push(self.read_inter_index(timestamp.to_owned())?);
         }
         Ok(inter_indexs)
+    }
+
+    fn read_index_config(&self,attribute: KeyType) -> Result<IndexConfigs>{
+        let data = self
+            .index_config_db
+            .get(attribute.to_le_bytes())?
+            .context("failed to read index config")?;
+        Ok(bincode::deserialize::<IndexConfigs>(&data[..])?)
     }
 }
 
@@ -163,16 +170,16 @@ impl WriteInterface for SimChain {
             .put(tx.id.to_le_bytes(), bytes)?;
         Ok(())
     }
-    fn write_index_cost(&mut self, index_cost: IndexCost) -> Result<()>{
-        let bytes = bincode::serialize(&index_cost)?;
-        self.intra_index_db
-            .put(index_cost.blockId.to_le_bytes(), bytes)?;
-        Ok(())
-    }
     fn write_inter_index(&mut self, index: InterIndex) -> Result<()>{
         let bytes = bincode::serialize(&index)?;
         self.inter_index_db
             .put(index.start_timestamp.to_le_bytes(), bytes)?;
+        Ok(())
+    }
+    fn write_index_config(&mut self, config: IndexConfigs) -> Result<()>{
+        let bytes = bincode::serialize(&config)?;
+        self.index_config_db
+            .put(config.attribute.to_le_bytes(), bytes)?;
         Ok(())
     }
 }

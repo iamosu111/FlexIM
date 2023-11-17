@@ -1,4 +1,4 @@
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap};
 use log::info;
 use crate::{Digest, btree::index_build,btree::index_build_block};
 use super::*;
@@ -21,16 +21,21 @@ pub fn build_block<'a>(
     pre_hash: Digest,
     raw_txs: impl Iterator<Item = &'a RawTransaction>,
     chain: &mut (impl ReadInterface + WriteInterface),
+    configs_map:&mut IndexConfigs_map,
 ) -> Result<(BlockHeader)> {    
     // let param = chain.get_parameter()?;
     let txs: Vec<Transaction> = raw_txs.map(|rtx: &RawTransaction| Transaction::create(rtx)).collect();
-    let mut _time_stamp: TsType = Default::default();
+    let _time_stamp = txs[0].value.time_stamp;
     let mut tx_ids: Vec<IdType> = Vec::new();
-    _time_stamp = txs[0].value.time_stamp;
-    let mut attributes: [usize;3]= [0,1,2];
+    let mut attributes: [String; 3] = [
+    String::from("id"),
+    String::from("address"),
+    String::from("value"),
+];
     let mut height=[block_id];
     let mut bloom_filter: SeededBloomFilter = SeededBloomFilter::new(BLOOM_CAPACITY,BLOOM_FP);
     for tx in txs.iter(){
+      tx_ids.push(tx.id);
       bloom_filter.insert(&tx.id);
       bloom_filter.insert(&tx.value.address);
       bloom_filter.insert(&tx.value.trans_value);
@@ -51,16 +56,10 @@ pub fn build_block<'a>(
 
     chain.write_block_header(block_header.clone())?;
     chain.write_block_data(block_data.clone())?;
-    //todo : Index cost evaluation
-    let (block_index,index_cost_value)=index_build_block(&attributes,block_id,chain)?;
+    let (block_index)=index_build_block(&attributes,block_id,chain,configs_map)?;
     //todo : BMT build
     //todo : RMT build
-    let mut index_cost= IndexCost {
-        blockId: block_id,
-        index_cost: index_cost_value,
-    };
-    //chain.write_intra_index(block_index)?;
-    chain.write_index_cost(index_cost)?;
+    chain.write_intra_index(block_index)?;
     Ok((block_header))
 }
 

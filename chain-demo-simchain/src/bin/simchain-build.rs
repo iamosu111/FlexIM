@@ -45,20 +45,23 @@ fn build_chian(data_path: &Path, out_db_path: &Path, param: &mut Parameter) -> R
     let mut block_headers: Vec<BlockHeader> = Vec::new();
     // index_size count number of bytes e.g., index_size = 10 means 10B
     let mut index_size :IdType = 0;
-
+    let configs_map = IndexConfigs_map::new();
     let key_pair: Keypair = Keypair::generate_with(OsRng);
     let mut pre_hash = Digest::default();
     for (id,tx) in raw_txs.iter(){
         info!("build block {}", id);
         let mut sorted_txs = tx.clone();
         sorted_txs.sort_by_key(|tx| tx.key.clone());
-        let block_header = build_block(*id, pre_hash, sorted_txs.iter(),  &mut chain)?;
+        let block_header = build_block(*id, pre_hash, sorted_txs.iter(),  &mut chain,&mut configs_map)?;
         // intra_index size
         index_size += intra_index_size;
-
         block_headers.push(block_header.clone());
         pre_hash = block_header.to_digest();
         block_count += 1;
+    }
+    let configs_vec=Vec::from(configs_map);
+    for configs in configs_vec{
+        chain.write_index_config(configs_vec)?;
     }
     param.block_count = block_count;
     param.start_block_id = start_block_id;

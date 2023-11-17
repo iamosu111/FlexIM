@@ -39,7 +39,7 @@ pub struct RawTransaction {
 //     }
 // }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq,Serialize, Deserialize)]
 pub struct Transaction {
     pub id: IdType,
     pub block_id: IdType,

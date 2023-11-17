@@ -1,5 +1,6 @@
-use std::collections::{BTreeMap,HashMap};
+use std::{collections::{BTreeMap,HashMap, HashSet}, time::Instant};
 use anyhow::Ok;
+use serde_json::{to_string, value::Index};
 
 use super::*;
 
@@ -11,16 +12,15 @@ use super::*;
 //     trans_value,
 //     time_stamp,
 // }
-pub fn index_build_block(attribute: &[usize], height: IdType, chain: &mut (impl ReadInterface + WriteInterface)) -> Result<(IntraIndex, Vec<u64>)> {
+pub fn index_build_block(attribute: &[String], height: IdType, chain: &mut (impl ReadInterface + WriteInterface), configs_map:&mut IndexConfigs_map) -> Result<IntraIndex> {
     let mut index_map = HashMap::new();
     let mut index_cost = Vec::new();
-
-    for k in 0..attribute.len() {
-        if attribute[k]==1 {
+    for k in attribute.iter() {
             let (b_tree, cost) = create_btree_with_evaluation(k, chain, height)?;
-            index_map.insert(k, b_tree);
+            let config=IndexConfig::from_b_tree(cost, &b_tree, height, k)?;
+            index_map.insert(k.clone(), b_tree);
             index_cost.push(cost);
-        }
+            configs_map.add_config(k.clone(), config);
     }
 
     let intra_btree = IntraIndex {
@@ -28,12 +28,12 @@ pub fn index_build_block(attribute: &[usize], height: IdType, chain: &mut (impl 
         index: index_map,
     };
 
-    Ok((intra_btree, index_cost))
+    Ok((intra_btree))
 }
 
 
 pub fn index_build(
-    attribute: &[usize],
+    attribute: &[String],
     heights: &[IdType],
     chain: &mut (impl ReadInterface + WriteInterface),
 ) -> Result<()> {
@@ -44,12 +44,10 @@ pub fn index_build(
     for &height in heights.iter() {
         let mut intra_index = Vec::new();
         let mut index_map = HashMap::new();
-        for attr in 0..attribute.len() {
-            if attribute[attr] == 1 {
+        for attr in attribute.iter() {
                 let b_tree = create_btree(attr, chain, height)?; 
-                index_map.insert(attr, b_tree);
-                intra_index.push(b_tree);
-            }
+                index_map.insert(attr.clone(), b_tree.clone());
+                intra_index.push(b_tree.clone());
         }
         let intra_btree = IntraIndex {
             blockId: height,
@@ -61,14 +59,62 @@ pub fn index_build(
     Ok(())
 }
 
+pub fn update_indices_based_on_config(
+    configs: &[IndexConfig],
+    chain: &mut (impl ReadInterface + WriteInterface)
+) -> Result<()> {
+    let mut needed_indices = HashMap::new();
+
+    // 确定每个 block_height 需要的索引
+    for config in configs {
+        needed_indices
+            .entry(config.block_height)
+            .or_insert_with(Vec::new)
+            .push(config.attribute.clone());
+    }
+
+    // 遍历每个 block_height，对索引进行更新
+    for (&block_height, required_attrs) in &needed_indices {
+        let mut existing_intra_index = chain.read_intra_index(block_height)?;
+
+        // 确定需要创建的索引
+        let to_create = required_attrs
+            .iter()
+            .filter(|attr| !existing_intra_index.index.contains_key(*attr))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        // 确定需要删除的索引
+        let to_delete: Vec<String> = existing_intra_index.index.keys()
+            .filter(|existing_attr| !required_attrs.contains(existing_attr))
+            .cloned()
+            .collect();
+
+        // 删除不再需要的索引
+        for attr in to_delete {
+            existing_intra_index.index.remove(&attr);
+        }
+        // 创建缺失的索引
+        for attr in &to_create {
+            let b_tree = create_btree(attr, chain, block_height)?;
+            existing_intra_index.index.insert(attr.clone(), b_tree);
+        }
+
+        // 更新修改后的索引
+        chain.write_intra_index(existing_intra_index)?;
+    }
+
+    Ok(())
+}
+
 // create btree for a certain attribute
 pub fn create_btree(
-    attribute: usize,
+    attribute: &String,
     chain: &impl ReadInterface,
     height: IdType,
 ) -> Result<BTreeEnum> {  // 注意这里的返回类型
     let block_data = chain.read_block_data(height)?;
-    let extracted_data = extract_key(attribute, block_data);
+    let extracted_data = extract_key(attribute, &block_data);
     
     match extracted_data {
         ExtractedData::TxIds(tx_ids_data) => {
@@ -88,14 +134,28 @@ pub fn create_btree(
 }
 
 pub fn create_btree_with_evaluation(
-    attribute: usize,
+    attribute: &String,
     chain: &impl ReadInterface,
     height: IdType,
-) -> Result<(BTreeEnum, u64)>
+) -> Result<(BTreeEnum, f64)>
 {
+    let start = Instant::now();
+    // 执行数据库读取操作
     let block_data = chain.read_block_data(height)?;
-    let extracted_data = extract_key(attribute, block_data);
-    let mut index_cost: u64 = 0;
+    let duration = start.elapsed().as_secs_f64() * 1_000.0;
+    let (extracted_data,selectivity) = extract_key_cost(attribute, &block_data);
+    let query_cost = QueryCost {
+        n_pages: 0.0,        
+        c_page: 0.0,          
+        c_tuple: 0.0001,         // 示例值
+        n_total_tuple: block_data.tx_ids.len() as f64, 
+    };
+
+    let lambda = 0.0;  // 初始 
+    let sigma = selectivity;   // 初始值为选择率
+
+    // 计算 index_cost
+    let index_cost = (query_cost.cost(lambda, sigma)+ duration) ;
 
     match extracted_data {
         ExtractedData::TxIds(tx_ids_data) => {
@@ -127,21 +187,42 @@ where
     btree
 }
 
-pub fn extract_key(attribute: usize, block_data: BlockData) -> ExtractedData {
-    match attribute {
-        0 => ExtractedData::TxIds(block_data.tx_ids),
-        1 => {
-            let addresses_data= block_data.txs.iter().map(|x| x.value.address).collect();
+pub fn extract_key_cost(attribute: &String, block_data: &BlockData) -> (ExtractedData,f64) {
+    let total_count = block_data.txs.len() as f64;
+    match attribute.as_str() {
+        "id" => {
+            let unique_ids: HashSet<_> = block_data.tx_ids.iter().collect();
+            let selectivity = unique_ids.len() as f64 / total_count;
+            (ExtractedData::TxIds(block_data.tx_ids.clone()),selectivity)},
+        "address" => {
+            let addresses_data:Vec<String>= block_data.txs.iter().map(|x| x.value.address.clone()).collect();
+            let unique_addresses: HashSet<_> = addresses_data.iter().collect();
+            let selectivity = unique_addresses.len() as f64 / total_count;
+            (ExtractedData::Addresses(addresses_data),selectivity)
+        },
+        "value" => {
+            let trans_values_data:Vec<u64> = block_data.txs.iter().map(|x| x.value.trans_value).collect();
+            let unique_trans_values: HashSet<_> = trans_values_data.iter().collect();
+            let selectivity = unique_trans_values.len() as f64 / total_count;
+            (ExtractedData::TransValues(trans_values_data),selectivity)
+        },
+        _ => panic!("attribute error!"),
+    }
+}
+
+pub fn extract_key(attribute: &String, block_data: &BlockData) -> ExtractedData {
+    match attribute.as_str() {
+        "id" => ExtractedData::TxIds(block_data.tx_ids.clone()),
+        "address" => {
+            let addresses_data= block_data.txs.iter().map(|x| x.value.address.clone()).collect();
             ExtractedData::Addresses(addresses_data)
         },
-        2 => {
+        "value" => {
             let trans_values_data = block_data.txs.iter().map(|x| x.value.trans_value).collect();
             ExtractedData::TransValues(trans_values_data)
         },
         _ => panic!("attribute error!"),
     }
 }
-
-
 
 
