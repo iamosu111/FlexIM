@@ -54,6 +54,7 @@ pub fn load_raw_tx_from_str(input: &str) -> Result<BTreeMap<IdType, Vec<RawTrans
             trans_in: iter.next().unwrap().eq("in"),
             trans_value: iter.next().unwrap().parse::<TxType>().unwrap(),
             time_stamp: iter.next().unwrap().parse::<TsType>().unwrap(),
+            address: key.clone(),
         };
         let raw_tx = RawTransaction {
             block_id,
@@ -145,6 +146,7 @@ mod tests {
                             trans_in: true,
                             trans_value: 50,
                             time_stamp: 1571443461,
+                            address:"muhtvdmsnbQEPFuEmxcChX58fGvXaaUoVt".to_string()
                         }
                     },
                     RawTransaction {
@@ -154,6 +156,7 @@ mod tests {
                             trans_in: false,
                             trans_value: 10,
                             time_stamp: 1571443461,
+                            address:"mvbnrCX3bg1cDRUu8pkecrvP6vQkSLDSou".to_string(),
                         }
                     },
                 ],);

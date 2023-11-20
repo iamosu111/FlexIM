@@ -16,7 +16,10 @@ rsa = "0.6"
 rand = "0.8"
 howlong = "0.1"
 ring = "0.16.15"
+ahash = { version = "0.6.1", default-features = false }
 protobuf = "2.16.2"
+ndarray = "0.15.4"
+lazy_static = "1.4.0"
 
 
 [dependencies.aead]

@@ -1,9 +1,10 @@
-use super::{IdType, TsType, PkType};
+use super::{IdType, TsType, PkType, BTreeEnum};
 use std::collections::{HashMap, BTreeMap};
 use serde::{Deserialize, Serialize};
-use crate::{digest::*, KeyType, FloatType, TransactionValue, TxType, Transaction};
+use crate::{digest::*, KeyType, FloatType, TransactionValue, TxType, Transaction, SeededBloomFilter};
 
 // static INDEX_ID_CNT: AtomicU64 = AtomicU64::new(0);
+
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct BlockData {
@@ -19,7 +20,7 @@ pub struct BlockHeader {
     pub pre_hash: Digest,
     // pub data_root: Digest,
     pub time_stamp: TsType,
-    pub BMT_root: Digest,
+    pub BMT_root: SeededBloomFilter,
     pub rmt_root: Digest,
 }
 
@@ -37,16 +38,10 @@ impl Digestible for BlockHeader {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntraIndex {
     pub blockId: IdType,
-    pub attribute: Vec<usize>,
-    pub intraindex: Vec<BTreeMap<u64,Transaction>>,
+    pub index: HashMap<String, BTreeEnum>,  // 使用BTreeEnum替代具体的BTreeMap类型
 }
 
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct IndexCost {
-    pub blockId: IdType,
-    pub index_cost: Vec<u64>,
-}
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InterIndex {
     pub start_timestamp: TsType,
