@@ -41,6 +41,14 @@ pub struct IntraIndex {
     pub index: HashMap<String, BTreeEnum>,  // 使用BTreeEnum替代具体的BTreeMap类型
 }
 
+impl IntraIndex{
+    pub fn new(id:IdType) -> IntraIndex {
+        IntraIndex {
+            blockId: id, 
+            index: HashMap::new(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct InterIndex {

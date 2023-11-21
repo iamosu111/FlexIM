@@ -88,7 +88,7 @@ impl IndexSelectionBandit {
     }
 
     // 使用 Boltzmann Exploration 选择活跃的臂
-    fn choose_arm(&mut self, block_frequency: &Array1<f64>) -> Result<Vec<IndexConfig>> {
+    fn choose_arm(&mut self, block_frequency: &Array1<f64>,start_id:usize) -> Result<Vec<IndexConfig>> {
         let mut selected_index_configuration = Vec::new();
         let mut remaining_budget = self.budget;
         let mut rng = rand::thread_rng();
@@ -103,8 +103,8 @@ impl IndexSelectionBandit {
                     Err(_) => return None, // 如果转换失败，则跳过此臂
                 };
     
-                if block_height_usize < block_frequency.len() && arm.storage_cost <= remaining_budget {
-                    let weighted_performance = (arm.performance * block_frequency[block_height_usize] / self.temperature).exp();
+                if block_height_usize-start_id < block_frequency.len() && arm.storage_cost <= remaining_budget {
+                    let weighted_performance = (arm.performance * block_frequency[block_height_usize-start_id] / self.temperature).exp();
                     Some((index, weighted_performance))
                 } else {
                     None // 如果超出索引范围或预算，则跳过此臂
@@ -116,7 +116,7 @@ impl IndexSelectionBandit {
         if active_arms.is_empty() {
             panic!("Storage budget is too less");
         }
-        
+        info!("arms:{:?}",active_arms);
         // 计算每个活跃臂的选择概率
         // let probabilities: Vec<f64> = active_arms.iter()
         //     .map(|(_index, &reward)| {
@@ -129,21 +129,26 @@ impl IndexSelectionBandit {
         //     .collect();
         
         // let total: f64 = probabilities.iter().sum();
-
-        while remaining_budget > 0.0 && !active_arms.is_empty() {
-            // 直接使用性能指数作为权重
-            let weights: Vec<f64> = active_arms.iter().map(|&(_index, exp_perf)| exp_perf).collect();
-            let dist = WeightedIndex::new(&weights).unwrap();
-            let chosen_index = dist.sample(&mut rng);
-
+        let weights: Vec<f64> = active_arms.iter().map(|&(_index, exp_perf)| exp_perf).collect();
+        let (mut weight_tree,w_0)= WeightTree::new(&weights);
+        info!{"weight_tree:{:?},w_0:{:?}", weight_tree,w_0};
+        let mut rng= rand::thread_rng();
+        let mut arms_number=weights.len();
+        while remaining_budget > 0.0 && arms_number>0 {
+            let random_number: f64 = rng.gen_range(0.0..w_0);
+            let chosen_index=weight_tree.select_arm(random_number);
+            // let dist = WeightedIndex::new(&weights).unwrap();
+            // let chosen_index = dist.sample(&mut rng);
             // 使用索引更新选择和预算
             let (arm_index, exp_perf) = active_arms[chosen_index];
             let chosen_arm = self.arms[arm_index].clone();
-            selected_index_configuration.push(chosen_arm.clone());
-            remaining_budget -= chosen_arm.storage_cost;
-
+            if remaining_budget>chosen_arm.storage_cost {
+                selected_index_configuration.push(chosen_arm.clone());
+                remaining_budget -= chosen_arm.storage_cost;
+            }
+            weight_tree.update(chosen_index, 0.0);
             // 移除被选择的臂
-            active_arms.swap_remove(chosen_index);
+            arms_number-=1;
 
         }
         // self.episode+=1;
@@ -158,6 +163,47 @@ impl IndexSelectionBandit {
     //     self.temperature *= 1.0 - (decay_rate * self.episode as f64);
     // }
     // // 其他方法，比如更新臂的奖励，激活或停用臂等...
+}
+#[derive(Debug)]
+struct WeightTree {
+    tree: Vec<f64>,
+    n: usize,
+}
+
+impl WeightTree {
+    fn new(weights: &Vec<f64>) -> (Self, f64) {
+        let n = weights.len();
+        let mut tree = vec![0.0; 2 * n];
+        tree[n..(2 * n)].clone_from_slice(weights);
+        for i in (1..n).rev() {
+            tree[i] = tree[2 * i] + tree[2 * i + 1];
+        }
+        let w_0=tree[1];
+        (WeightTree { tree, n },w_0)
+    }
+
+    fn update(&mut self, index: usize, val: f64) {
+        let mut i = index + self.n;
+        self.tree[i] = val;
+        while i > 1 {
+            i /= 2;
+            self.tree[i] = self.tree[2 * i] + self.tree[2 * i + 1];
+        }
+    }
+
+    fn select_arm(&self, w_random: f64) -> usize {
+        let mut i = 1;
+        let mut remaining_weight = w_random;
+        while i < self.n {
+            if self.tree[2 * i] >= remaining_weight {
+                i *= 2;
+            } else {
+                remaining_weight -= self.tree[2 * i];
+                i = 2 * i + 1;
+            }
+        }
+        i - self.n
+    }
 }
 
 pub struct QueryCost {
@@ -239,16 +285,21 @@ pub fn index_management(chain: &mut (impl ReadInterface + WriteInterface))-> Res
     }
     // ... 构建 IndexSelectionBandit ...
     let temperature = 0.3; // 示例值
-    let budget = (100*1024*1024) as f64; // 100MB
+    let budget = (20*1024*1024) as f64; // 20MB
     key_usage.clear();
     let mut Bandit = IndexSelectionBandit {
         arms: arms_map,
         temperature,
         budget,
     };  
-    let index_configuration= Bandit.choose_arm(&frequency)?;
+    info!("frequency:{:?}",frequency);
+    let index_configuration= Bandit.choose_arm(&frequency,parameter.start_block_id.try_into().unwrap())?;
     update_indices_based_on_config(&index_configuration,chain)?;
     info!("index management end, use time {}",cpu_timer.elapsed());
+    let size=chain.read_intra_indexs_size();
+    info!("the intra-index size {:?}", size);
     Ok(())
 }
+
+
 

@@ -29,6 +29,10 @@ pub fn convert_to_normalized_matrix(block_count: usize) -> Array2<f64> {
 
 pub fn holt_linear_exponential_smoothing(matrix: &Array2<f64>, alpha: f64, beta: f64) -> Array1<f64> {
     let (n, m) = matrix.dim();
+    if n < 2 {
+        return matrix.row(n - 1).to_owned();
+    }
+    
     let mut last_forecasts = Array1::zeros(n);
 
     for i in 0..n {

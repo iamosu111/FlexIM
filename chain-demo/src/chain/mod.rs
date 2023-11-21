@@ -102,8 +102,9 @@ pub trait ReadInterface {
     fn get_parameter(&self) -> Result<Parameter>;
     fn read_block_header(&self, id: IdType) -> Result<BlockHeader>;
     fn read_block_data(&self, id: IdType) -> Result<BlockData>;
-    fn read_intra_index(&self, timestamp: TsType) -> Result<IntraIndex>;
-    fn read_intra_indexs(&self) -> Result<Vec<IntraIndex>>;
+    fn read_intra_index(&self, id: IdType) -> Result<IntraIndex>;
+    fn read_intra_indexs_size(&self) -> usize;
+    // fn read_intra_indexs(&self) -> Result<Vec<IntraIndex>>;
     fn read_transaction(&self, id: IdType) -> Result<Transaction>;
     fn read_inter_index(&self, timestamp: TsType) -> Result<InterIndex>;
     fn read_inter_indexs(&self) -> Result<Vec<InterIndex>>;
@@ -117,7 +118,8 @@ pub trait WriteInterface {
     fn write_intra_index(&mut self, index: IntraIndex) -> Result<()>;
     fn write_transaction(&mut self, tx: Transaction) -> Result<()>;
     fn write_inter_index(&mut self, index: InterIndex) -> Result<()>;
-    fn write_index_config(&self,config:IndexConfigs) -> Result<()>;
+    fn write_index_config(&mut self,config:IndexConfigs) -> Result<()>;
+    fn update_intra_index(&mut self, indexs: Vec<IntraIndex>) -> Result<()>;
 }
 
 #[cfg(test)]

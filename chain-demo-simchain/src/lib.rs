@@ -1,11 +1,13 @@
 #[macro_use]
 extern crate log;
 
-use anyhow::{Context, Result, Ok};
+use anyhow::{Context, Result};
 use rocksdb::{self, DB};
 use std::fs;
 use std::path::{Path, PathBuf};
 use chain_demo::*;
+use rocksdb::{WriteBatch,IteratorMode};
+use core::result::Result::Ok;
 
 pub struct SimChain {
     root_path: PathBuf,
@@ -88,21 +90,32 @@ impl ReadInterface for SimChain {
             .context("failed to read block data")?;
         Ok(bincode::deserialize::<BlockData>(&data[..])?)
     }
-    fn read_intra_index(&self, blockId: IdType) -> Result<IntraIndex>{
-        let data = self
-            .intra_index_db
-            .get(blockId.to_le_bytes())?
-            .context("failed to read intra index")?;
-        Ok(bincode::deserialize::<IntraIndex>(&data[..])?)
-    }
-    fn read_intra_indexs(&self) -> Result<Vec<IntraIndex>>{
-        let mut intra_indexs: Vec<IntraIndex> = Vec::new();
-        for blockId in &self.param.inter_index_timestamps {
-            info!("read_inter_indexs timestamps {}",timestamp.to_owned());
-            inter_indexs.push(self.read_inter_index(timestamp.to_owned())?);
+    fn read_intra_index(&self, id: IdType) -> Result<IntraIndex> {
+        let data_result = self.intra_index_db.get(id.to_le_bytes());
+    
+        match data_result {
+            Ok(Some(data)) => Ok(bincode::deserialize::<IntraIndex>(&data[..])?),
+            Ok(None) => Ok(IntraIndex::new(id)), // 当键不存在时返回一个新的 IntraIndex 实例
+            Err(e) => Err(e).context("failed to read intra index"),
         }
-        Ok(inter_indexs)
     }
+    fn read_intra_indexs_size(&self) -> usize {
+        let mut res:usize=0;
+        let iter=self.intra_index_db.iterator(IteratorMode::Start);
+        for (key, value) in iter {
+            res+=key.len();
+            res+=value.len();
+        }
+        res
+    }
+    // fn read_intra_indexs(&self) -> Result<Vec<IntraIndex>>{
+    //     let mut intra_indexs: Vec<IntraIndex> = Vec::new();
+    //     for blockId in &self.param.inter_index_timestamps {
+    //         info!("read_inter_indexs timestamps {}",timestamp.to_owned());
+    //         inter_indexs.push(self.read_inter_index(timestamp.to_owned())?);
+    //     }
+    //     Ok(inter_indexs)
+    // }
     // fn read_intra_index_node(&self, id: IdType) -> Result<IntraIndexNode>;
     // fn read_skip_list_node(&self, id: IdType) -> Result<SkipListNode>;
     fn read_transaction(&self, id: IdType) -> Result<Transaction>{
@@ -131,7 +144,7 @@ impl ReadInterface for SimChain {
     fn read_index_config(&self,attribute: KeyType) -> Result<IndexConfigs>{
         let data = self
             .index_config_db
-            .get(attribute.to_le_bytes())?
+            .get(attribute.as_bytes())?
             .context("failed to read index config")?;
         Ok(bincode::deserialize::<IndexConfigs>(&data[..])?)
     }
@@ -162,6 +175,24 @@ impl WriteInterface for SimChain {
             .put(index.blockId.to_le_bytes(), bytes)?;
         Ok(())
     }
+    fn update_intra_index(&mut self, indexs: Vec<IntraIndex>) -> Result<()>{
+        let mut batch = WriteBatch::default();
+
+        // 添加删除操作到批处理中
+        for (key, _) in self.intra_index_db.iterator(IteratorMode::Start) {
+            batch.delete(key);
+        }
+    
+        // 遍历 Vec<IntraIndex> 并将每个 IntraIndex 添加到批处理中
+        for index in indexs {
+            let bytes = bincode::serialize(&index)?;
+            batch.put(index.blockId.to_le_bytes(), bytes);
+        }
+    
+        // 原子地应用批处理
+        self.intra_index_db.write(batch)?;
+        Ok(())
+    }
     // fn write_intra_index_node(&mut self, node: IntraIndexNode) -> Result<()>;
     // fn write_skip_list_node(&mut self, node: SkipListNode) -> Result<()>;
     fn write_transaction(&mut self, tx: Transaction) -> Result<()>{
@@ -179,7 +210,7 @@ impl WriteInterface for SimChain {
     fn write_index_config(&mut self, config: IndexConfigs) -> Result<()>{
         let bytes = bincode::serialize(&config)?;
         self.index_config_db
-            .put(config.attribute.to_le_bytes(), bytes)?;
+            .put(config.attribute.as_bytes(), bytes)?;
         Ok(())
     }
 }

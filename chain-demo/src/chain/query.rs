@@ -184,21 +184,32 @@ pub struct QueryRequest{
     pub value: [Option<KeyType>; 2],
 }
 
-pub fn extract_request(q_param: &QueryParam)-> Result<Vec<QueryRequest>>{
-    let mut requests=Vec::new();
-    for x in 0..q_param.key.len(){
-        let request= QueryRequest{
+pub fn extract_request(q_param: &QueryParam) -> Result<Vec<QueryRequest>> {
+    let mut requests = Vec::new();
+    
+    // 获取 KEY_USAGE_COUNTER 的互斥锁
+    let mut key_usage = KEY_USAGE_COUNTER.lock().unwrap();
+
+    for x in 0..q_param.key.len() {
+        let request = QueryRequest {
             key: q_param.key[x].clone(),
             value: q_param.value[x].clone(),
         };
+
+        // 更新 key 使用计数
+        *key_usage.entry(q_param.key[x].clone()).or_insert(0) += 1;
+
         requests.push(request);
     }
-    Ok(requests) 
+
+    Ok(requests)
 }
 
 pub fn historical_query(q_param: &QueryParam, chain: &mut (impl ReadInterface + WriteInterface)) 
  -> Result<OverallResult>{
-    info!("process query {:?}", q_param);
+    let mut query_counter = QUERY_COUNTER.lock().unwrap();
+    *query_counter+=1;
+    info!("process query {:?}; query_counter:{:?}", q_param,query_counter);
     if q_param.key.len()!=q_param.value.len(){
         panic!("key's len is not equal to value's len");
     }
@@ -222,8 +233,10 @@ pub fn historical_query(q_param: &QueryParam, chain: &mut (impl ReadInterface + 
     };
     //query block_header & block_data within the query range of timestamp
     if q_param.key.contains(&"timestamp".to_string()) {
+        info!("query_inter_index");
         res_txs=query_chain_inter_index(&q_param, chain)?;
     } else {
+        info!("query_no_inter_index");
         res_txs=query_chain_no_inter_index(&q_param, chain)?;
     }
     //query inside block to check if consist key
@@ -233,7 +246,7 @@ pub fn historical_query(q_param: &QueryParam, chain: &mut (impl ReadInterface + 
     info!("used time: {:?}", cpu_timer.elapsed());
     info!("vo_size: {:?}", vo_size);
     let _deferred_execution = DeferredExecution::new(|| {
-        let mut query_counter = QUERY_COUNTER.lock().unwrap();
+        // let mut query_counter = QUERY_COUNTER.lock().unwrap();
         if *query_counter >= QUERY_THRESHOLD {
             // 如果达到阈值，重置计数器并触发额外的函数
             *query_counter = 0;
@@ -286,18 +299,18 @@ fn query_chain_inter_index(
                 continue;
             }
             let mut counter = BLOCK_ACCESS_COUNTER.lock().unwrap();
-            let height: usize = index.try_into().expect("Block index is too large");
-    if counter.is_empty() {
-        // 初始化第一行
-        counter.push(Vec::new());
-    }
-
-    if let Some(last_row) = counter.last_mut() {
-        if height >= last_row.len(){
-            last_row.resize((height + 1), 0);
-        }
-        last_row[height] += 1;
-    }
+            let height = index;
+            if counter.is_empty() {
+             // 初始化第一行
+             counter.push(Vec::new());
+             }
+             let index_1=(height-start_id) as usize;
+             if let Some(last_row) = counter.last_mut() {
+                 if index_1 >= last_row.len(){
+                     last_row.resize((index_1 + 1), 0);
+                 }
+                 last_row[index_1] += 1;
+             }
             let block_txs=query_in_block(&requests,index,chain)?;
             let block_res = BlockTxs {
                 block_id:index,
@@ -318,7 +331,8 @@ fn judge_contain_key(requests: &Vec<QueryRequest>, bf: SeededBloomFilter) -> boo
         }
 
         if request.key == "address" {
-            if bf.contains(&request.value[0]) {
+            if bf.contains(&request.value[0].clone().unwrap()) {
+                info!{"address exists"}
                 return true
             }
         }else{
@@ -375,24 +389,26 @@ fn query_chain_no_inter_index(
                 continue;
             }
             let mut counter = BLOCK_ACCESS_COUNTER.lock().unwrap();
-            let height: usize = block_index.try_into().expect("Block index is too large");
-    if counter.is_empty() {
-        // 初始化第一行
-        counter.push(Vec::new());
-    }
-
-    if let Some(last_row) = counter.last_mut() {
-        if height >= last_row.len() {
-            last_row.resize((height + 1), 0);
-        }
-        last_row[height] += 1;
-    }
+            let height = block_index;
+            if counter.is_empty() {
+                // 初始化第一行
+                counter.push(Vec::new());
+                }
+                let index_1=(height-start_index) as usize;
+                if let Some(last_row) = counter.last_mut() {
+                    if index_1 >= last_row.len(){
+                        last_row.resize((index_1 + 1), 0);
+                    }
+                    last_row[index_1] += 1;
+                }
             let block_txs=query_in_block(&requests,block_index,chain)?;
-            let block_res = BlockTxs {
-                block_id:block_index,
-                Txs: block_txs,
-            };
-            res_txs.0.push(block_res);
+            if !block_txs.is_empty(){
+                let block_res = BlockTxs {
+                    block_id:block_index,
+                    Txs: block_txs,
+                };
+                res_txs.0.push(block_res);
+            }
             block_index -= 1;
     }
 
