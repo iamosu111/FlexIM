@@ -1,10 +1,12 @@
-use crate::{
-    approximate_element_count, approximate_false_positive_probability, bitset::Bitset,
-    optimal_bit_count, optimal_number_of_hashers, BloomFilter,
-};
+// use crate::{
+//     approximate_element_count, approximate_false_positive_probability, bitset::Bitset,
+//     optimal_bit_count, optimal_number_of_hashers, BloomFilter,
+// };
 use ahash::AHasher;
+use serde::{Serialize, Deserialize};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
+use super::*;
 
 /// A bloom filter that uses a single Hasher that can be seeded to simulate an arbitrary number
 /// of hash functions.
@@ -18,32 +20,7 @@ pub struct SeededBloomFilter {
 }
 
 impl SeededBloomFilter {
-    /// Initialize a new instance of SeededBloomFilter that guarantees that the false positive rate
-    /// is less than *desired_false_positive_probability* for up to *desired_capacity*
-    /// elements.
-    ///
-    /// SeededBloomFilter uses a single hash function that can be seeded to simulate an arbitrary
-    /// number of hash functions.
-    ///
-    /// # Panics
-    ///
-    /// Panics if desired_capacity == 0
-    ///
-    /// # Examples
-    /// ```
-    /// use bloom_filter_simple::{BloomFilter,SeededBloomFilter};
-    ///
-    /// fn main() {
-    ///     // We plan on storing at most 10 elements
-    ///     let desired_capacity = 10;
-    ///     // We want to assure that the chance of a false positive is less than 0.0001.
-    ///     let desired_fp_probability = 0.0001;
-    ///
-    ///     // We initialize a new SeededBloomFilter by specifying the desired Hashers as type
-    ///     // parameters
-    ///     let mut filter = SeededBloomFilter::new(desired_capacity, desired_fp_probability);
-    /// }
-    /// ```
+
     pub fn new(desired_capacity: usize, desired_false_positive_probability: f64) -> Self {
         if desired_capacity == 0 {
             panic!("an empty bloom filter is not defined");
@@ -83,7 +60,7 @@ impl SeededBloomFilter {
         )
     }
 
-    /// Creates a union of this bloom filter and 'other', which means 'contains' of the resulting
+        /// Creates a union of this bloom filter and 'other', which means 'contains' of the resulting
     /// bloom filter will always return true for elements inserted in either this bloom filter or in
     /// 'other' before creation.
     ///
@@ -95,7 +72,7 @@ impl SeededBloomFilter {
     /// # Examples
     /// 
     /// Union of two bloom filters with the same configuration.
-    /// ```
+    /// ``
     /// use bloom_filter_simple::{BloomFilter,SeededBloomFilter};
     ///
     /// fn main() {
@@ -125,7 +102,7 @@ impl SeededBloomFilter {
     ///     assert_eq!(true, filter_union.contains(&2));
     ///     assert_eq!(true, filter_union.contains(&3));
     /// }
-    /// ```
+    /// ``
     pub fn union(&self, other: &Self) -> Self {
         if !self.eq_configuration(other) {
             panic!("unable to union k-m bloom filters with different configurations");
@@ -137,54 +114,7 @@ impl SeededBloomFilter {
         }
     }
 
-    /// Creates a intersection of this bloom filter and 'other', which means 'contains' of the resulting
-    /// bloom filter will always return true for elements inserted both in this bloom filter and in
-    /// 'other' before creation.
-    /// The false positive probability of the resulting bloom filter is at most the false positive
-    /// probability of 'other' or 'self'.
-    /// The false positive probability of the resulting bloom filter may be bigger than the false
-    /// positive probability of a new empty bloom filter with the intersecting elements inserted.
-    /// The functions 'approximate_current_false_positive_probability' and 'approximate_element_count'
-    /// called on the resulting bloom filter may return too big approximations.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the desired capacity or desired false positive probability of 'self' and 'other'
-    /// differ.
-    ///
-    /// # Examples
-    /// 
-    /// Intersection of two bloom filters with the same configuration.
-    /// ```
-    /// use bloom_filter_simple::{BloomFilter,SeededBloomFilter};
-    ///
-    /// fn main() {
-    ///     // The configuration of both bloom filters has to be the same
-    ///     let desired_capacity = 10_000;
-    ///     let desired_fp_probability = 0.0001;
-    ///
-    ///     // We initialize two new SeededBloomFilter 
-    ///     let mut filter_one = SeededBloomFilter::new(desired_capacity, desired_fp_probability);
-    ///     let mut filter_two = SeededBloomFilter::new(desired_capacity, desired_fp_probability);
-    /// 
-    ///     // Insert elements into the first filter
-    ///     filter_one.insert(&0);
-    ///     filter_one.insert(&1);
-    /// 
-    ///     // Insert elements into the second filter
-    ///     filter_two.insert(&1);
-    ///     filter_two.insert(&2);
-    ///     
-    ///     // Now we retrieve the intersection of both filters
-    ///     let filter_intersection = filter_one.intersect(&filter_two);
-    ///
-    ///     // The intersection will return true for a 'contains' check for the elements inserted 
-    ///     // previously into both constituent filters.
-    ///     assert_eq!(false, filter_intersection.contains(&0));
-    ///     assert_eq!(true, filter_intersection.contains(&1));
-    ///     assert_eq!(false, filter_intersection.contains(&2));
-    /// }
-    /// ```
+  
     pub fn intersect(&self, other: &Self) -> Self {
         if !self.eq_configuration(other) {
             panic!("unable to intersect k-m bloom filters with different configurations");
@@ -211,6 +141,7 @@ impl SeededBloomFilter {
         data.hash(&mut hasher);
         i * bits_per_hash + hasher.finish() as usize % bits_per_hash
     }
+
 
     /// SeededBloomFilter convert to bytes
     /// 
@@ -263,3 +194,4 @@ impl BloomFilter for SeededBloomFilter {
         return true;
     }
 }
+
