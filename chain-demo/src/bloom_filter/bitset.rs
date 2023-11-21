@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use serde::{Serialize, Deserialize};
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bitset {
     pub bytes: Vec<u8>,
     length: usize,
@@ -100,6 +101,8 @@ impl Bitset {
             length: self.length,
         }
     }
+
+
 }
 
 impl Debug for Bitset {
