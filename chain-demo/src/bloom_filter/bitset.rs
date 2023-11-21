@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use serde::{Serialize, Deserialize};
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, PartialOrd, Ord, Hash)]
 pub struct Bitset {
-    bytes: Vec<u8>,
+    pub bytes: Vec<u8>,
     length: usize,
 }
 

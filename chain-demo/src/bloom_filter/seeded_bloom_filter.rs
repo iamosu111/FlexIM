@@ -12,7 +12,7 @@ use super::*;
 /// of hash functions.
 ///
 /// Internally, the implementation uses *ahash::AHasher*.
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Hash, PartialOrd, Ord)]
 pub struct SeededBloomFilter {
     number_of_hashers: usize,
     bitset: Bitset,
@@ -140,6 +140,27 @@ impl SeededBloomFilter {
         let mut hasher = AHasher::new_with_keys(i as u128, i as u128);
         data.hash(&mut hasher);
         i * bits_per_hash + hasher.finish() as usize % bits_per_hash
+    }
+
+
+    /// SeededBloomFilter convert to bytes
+    /// 
+    /// ```
+    /// fn main(){
+    ///     // We plan on storing at most 10 elements
+    ///     let desired_capacity = 10;
+    ///     // We want to assure that the chance of a false positive is less than 0.0001.
+    ///     let desired_fp_probability = 0.0001;
+    ///
+    ///     // We initialize a new SeededBloomFilter by specifying the desired Hashers as type
+    ///     // parameters
+    ///     let mut filter = SeededBloomFilter::new(desired_capacity, desired_fp_probability);
+    ///     // convert to bytes
+    ///     let bytes = filter.to_bytes(); 
+    /// }
+    /// ```
+    pub fn to_bytes(&self) -> &Vec<u8>{
+        self.bitset.bytes.as_ref()
     }
 }
 
