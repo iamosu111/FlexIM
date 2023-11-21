@@ -4,10 +4,9 @@ use std::{
     marker::PhantomData,
 };
 
-use crate::{
-    approximate_element_count, approximate_false_positive_probability, bitset::Bitset,
-    optimal_bit_count, optimal_number_of_hashers, BloomFilter,
-};
+use crate::{ bitset::Bitset, BloomFilter,};
+
+use super::{approximate_element_count, approximate_false_positive_probability, optimal_bit_count, optimal_number_of_hashers};
 
 /// Bloom filter implementation using the improvements described by Kirsch and Mitzenmacher:
 ///
