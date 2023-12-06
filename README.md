@@ -1,12 +1,3 @@
-- [ ] ToDoList 
-    - [X] MB-Tree
-    - [ ] CMAB
-    - [ ] bloom filter+ budget allocation
-    - [ ] query 
-    - [ ] query verify
-    - [ ] inter-index
-    - [ ] index cost evaluation
-    - [ ] Root Merkle Tree
 
 ## Necessary Knowledge
 
