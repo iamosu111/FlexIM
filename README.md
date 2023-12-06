@@ -14,59 +14,9 @@
 ---compile code
 cargo test
 cargo build --release
----txyun
-host:118.195.131.243
-username:root
-password:perfectbcts
-resource_directory:/tmp
-```
-
-## Recompile & Run vChain+
-
-##### gen_key
 
 ```
-./gen_key -q 1024 -o path/to/pk
-```
 
-##### build_chain
-
-```
-./build_chain -t 2 --id-fanout 4 -b 4 -m 1023 -d 1 -k path/to/pk -i ../../data/dataset/eth.dat -r path/to/build_time.json -o path/to/output_db
-```
-
-##### query
-
-```
-./query -e -n -k path/to/pk -i path/to/output_db/ -q path/to/query.json -r path/to/result/process_time.json -v 2
-```
-
-##### query.json
-
-```
-[
-{
-    "start_blk": 1,
-    "end_blk": 20000,
-    "range": [
-      [
-        250000,
-        250001
-      ]
-    ],
-    "keyword_exp": {
-      "or": [
-        {
-          "input": "'0xa12431d0b9db640034b0cdfceef9cce161e62be4'"
-        },
-        {
-          "input": "'0xa12431d0b9db640034b0cdfceef9cce161e62be4'"
-        }
-      ]
-    }
-}
-]
-```
 
 
 
@@ -121,41 +71,6 @@ For example, if a server is running on port 8000 locally, then the get_param req
 
 ```
 curl -X GET http:127.0.0.1:8000/get/param
-```
-
-#### Query
-
-API endpoint is:
-
-```
-POST /verify
-```
-
-Parameters are followed with this request in JSON format
-
-```
-{
-    "blk_addr":"1H5BckuQwEDdZXBjJsSswm4jm6sYgSrqUs",
-    "time_stamp": [
-        1655512688,
-        1655512688
-    ],
-    "inter_index": true,
-    "intra_index": true
-}
-```
-
-The response is a JSON object like
-
-```
-{
-    "result": ...,
-    "res_sigs": ...,
-    "query_param": ...,
-    "query_time_ms": ...,
-    "use_inter_index": ...,
-    "use_intra_index": ...
-}
 ```
 
 
